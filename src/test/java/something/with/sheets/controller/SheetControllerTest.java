@@ -7,10 +7,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import something.with.sheets.config.SecurityConfig;
 import something.with.sheets.dto.ColumnDto;
 import something.with.sheets.dto.CreateSheetRequest;
-import something.with.sheets.dto.CreateSheetResponse;
 import something.with.sheets.service.SheetService;
 import something.with.sheets.dto.SetCellValueRequest;
 import something.with.sheets.dto.GetSheetResponse;
