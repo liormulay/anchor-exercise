@@ -12,6 +12,7 @@ import something.with.sheets.dto.ColumnDto;
 import something.with.sheets.dto.CreateSheetRequest;
 import something.with.sheets.dto.CreateSheetResponse;
 import something.with.sheets.service.SheetService;
+import something.with.sheets.dto.SetCellValueRequest;
 
 import java.util.Arrays;
 
@@ -52,5 +53,49 @@ class SheetControllerTest {
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(expectedId));
+    }
+
+    @Test
+    void setCellValue_Success() throws Exception {
+        SetCellValueRequest req = new SetCellValueRequest();
+        req.setRowIndex(0);
+        req.setColumnName("A");
+        req.setValue(true);
+        // No exception means success
+        org.mockito.Mockito.doNothing().when(sheetService).setCellValue(org.mockito.Mockito.anyString(), org.mockito.Mockito.any(SetCellValueRequest.class));
+        mockMvc.perform(post("/sheets/sheet-1/cell")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void setCellValue_TypeError() throws Exception {
+        SetCellValueRequest req = new SetCellValueRequest();
+        req.setRowIndex(0);
+        req.setColumnName("A");
+        req.setValue(123); // Not a boolean
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("Value does not match column type: boolean"))
+                .when(sheetService).setCellValue(org.mockito.Mockito.anyString(), org.mockito.Mockito.any(SetCellValueRequest.class));
+        mockMvc.perform(post("/sheets/sheet-1/cell")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Value does not match column type")));
+    }
+
+    @Test
+    void setCellValue_NotFound() throws Exception {
+        SetCellValueRequest req = new SetCellValueRequest();
+        req.setRowIndex(0);
+        req.setColumnName("A");
+        req.setValue(true);
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("Sheet not found"))
+                .when(sheetService).setCellValue(org.mockito.Mockito.anyString(), org.mockito.Mockito.any(SetCellValueRequest.class));
+        mockMvc.perform(post("/sheets/sheet-1/cell")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Sheet not found")));
     }
 } 
