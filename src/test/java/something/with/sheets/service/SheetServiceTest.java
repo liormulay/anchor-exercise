@@ -94,6 +94,112 @@ class SheetServiceTest {
     }
 
     @Test
+    void setCellValue_SupportsBasicLookup() {
+        // Setup
+        Column colA = new Column("A", "int");
+        Column colB = new Column("B", "int");
+        Sheet sheet = new Sheet("sheet-lookup", Arrays.asList(colA, colB));
+        colA.setCell(0, 123);
+        when(sheetRepository.findById("sheet-lookup")).thenReturn(sheet);
+
+        // Set B[0] as a lookup to A[0]
+        SetCellValueRequest req = new SetCellValueRequest();
+        req.setRowIndex(0);
+        req.setColumnName("B");
+        req.setValue("lookup(A,0)");
+        sheetService.setCellValue("sheet-lookup", req);
+        // B[0] should resolve to A[0]'s value
+        assertEquals(123, sheet.getColumns().get("B").getOrCreateCell(0).getValue());
+        // Changing A[0] should reflect in B[0]
+        colA.getOrCreateCell(0).setValue(456);
+        assertEquals(456, sheet.getColumns().get("B").getOrCreateCell(0).getValue());
+    }
+
+    @Test
+    void setCellValue_ThrowsOnLookupTypeMismatch() {
+        Column colA = new Column("A", "int");
+        Column colB = new Column("B", "boolean");
+        Sheet sheet = new Sheet("sheet-lookup", Arrays.asList(colA, colB));
+        colA.setCell(0, 123);
+        when(sheetRepository.findById("sheet-lookup")).thenReturn(sheet);
+
+        SetCellValueRequest req = new SetCellValueRequest();
+        req.setRowIndex(0);
+        req.setColumnName("B");
+        req.setValue("lookup(A,0)");
+        Exception ex = assertThrows(IllegalArgumentException.class, () -> sheetService.setCellValue("sheet-lookup", req));
+        assertTrue(ex.getMessage().contains("Type mismatch"));
+    }
+
+    @Test
+    void setCellValue_ThrowsOnLookupToMissingColumnOrRow() {
+        Column colA = new Column("A", "int");
+        Sheet sheet = new Sheet("sheet-lookup", Arrays.asList(colA));
+        when(sheetRepository.findById("sheet-lookup")).thenReturn(sheet);
+
+        SetCellValueRequest req = new SetCellValueRequest();
+        req.setRowIndex(0);
+        req.setColumnName("A");
+        req.setValue("lookup(B,0)"); // B does not exist
+        Exception ex1 = assertThrows(IllegalArgumentException.class, () -> sheetService.setCellValue("sheet-lookup", req));
+        assertTrue(ex1.getMessage().contains("Referenced column not found"));
+
+        // Now add B, but reference a row that doesn't exist (should create the cell, so no error)
+        Column colB = new Column("B", "int");
+        sheet.getColumns().put("B", colB);
+        req.setValue("lookup(B,5)"); // B[5] does not exist yet
+        // Should not throw, should create the cell
+        assertDoesNotThrow(() -> sheetService.setCellValue("sheet-lookup", req));
+    }
+
+    @Test
+    void setCellValue_ThrowsOnLookupCycle() {
+        Column colA = new Column("A", "int");
+        Sheet sheet = new Sheet("sheet-lookup", Arrays.asList(colA));
+        colA.setCell(0, 1);
+        colA.setCell(1, 2);
+        when(sheetRepository.findById("sheet-lookup")).thenReturn(sheet);
+
+        // A[1] lookup A[0]
+        SetCellValueRequest req1 = new SetCellValueRequest();
+        req1.setRowIndex(1);
+        req1.setColumnName("A");
+        req1.setValue("lookup(A,0)");
+        sheetService.setCellValue("sheet-lookup", req1);
+        // Now try to make A[0] lookup A[1] (cycle)
+        SetCellValueRequest req2 = new SetCellValueRequest();
+        req2.setRowIndex(0);
+        req2.setColumnName("A");
+        req2.setValue("lookup(A,1)");
+        Exception ex = assertThrows(IllegalArgumentException.class, () -> sheetService.setCellValue("sheet-lookup", req2));
+        assertTrue(ex.getMessage().contains("Cycle detected"));
+    }
+
+    @Test
+    void setCellValue_ClearsLookupWhenOverwritten() {
+        Column colA = new Column("A", "int");
+        Column colB = new Column("B", "int");
+        Sheet sheet = new Sheet("sheet-lookup", Arrays.asList(colA, colB));
+        colA.setCell(0, 10);
+        colB.setCell(0, 20);
+        when(sheetRepository.findById("sheet-lookup")).thenReturn(sheet);
+
+        // Set B[0] as a lookup to A[0]
+        SetCellValueRequest req = new SetCellValueRequest();
+        req.setRowIndex(0);
+        req.setColumnName("B");
+        req.setValue("lookup(A,0)");
+        sheetService.setCellValue("sheet-lookup", req);
+        assertEquals(10, colB.getOrCreateCell(0).getValue());
+        // Now overwrite with a normal value
+        req.setValue(99);
+        sheetService.setCellValue("sheet-lookup", req);
+        assertEquals(99, colB.getOrCreateCell(0).getValue());
+        // Should no longer be a lookup
+        assertFalse(colB.getOrCreateCell(0).isLookup());
+    }
+
+    @Test
     void getSheetById_ReturnsCorrectResponse() {
         // Setup
         Column colA = new Column("A", "boolean");
