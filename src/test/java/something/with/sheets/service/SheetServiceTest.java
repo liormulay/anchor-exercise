@@ -92,4 +92,37 @@ class SheetServiceTest {
         Exception ex = assertThrows(IllegalArgumentException.class, () -> sheetService.setCellValue("sheet-1", req));
         assertTrue(ex.getMessage().contains("Value does not match column type"));
     }
+
+    @Test
+    void getSheetById_ReturnsCorrectResponse() {
+        // Setup
+        Column colA = new Column("A", "boolean");
+        colA.setCell(0, true);
+        colA.setCell(1, false);
+        Column colB = new Column("B", "int");
+        colB.setCell(0, 42);
+        colB.setCell(1, 99);
+        Sheet sheet = new Sheet("sheet-123", Arrays.asList(colA, colB));
+        when(sheetRepository.findById("sheet-123")).thenReturn(sheet);
+
+        var response = sheetService.getSheetById("sheet-123");
+        assertNotNull(response);
+        assertEquals("sheet-123", response.getId());
+        assertEquals(2, response.getColumns().size());
+        var colAData = response.getColumns().stream().filter(c -> c.getName().equals("A")).findFirst().orElse(null);
+        assertNotNull(colAData);
+        assertEquals("boolean", colAData.getType());
+        assertEquals(Arrays.asList(true, false), colAData.getValues());
+        var colBData = response.getColumns().stream().filter(c -> c.getName().equals("B")).findFirst().orElse(null);
+        assertNotNull(colBData);
+        assertEquals("int", colBData.getType());
+        assertEquals(Arrays.asList(42, 99), colBData.getValues());
+    }
+
+    @Test
+    void getSheetById_ThrowsIfSheetNotFound() {
+        when(sheetRepository.findById("missing-id")).thenReturn(null);
+        Exception ex = assertThrows(IllegalArgumentException.class, () -> sheetService.getSheetById("missing-id"));
+        assertTrue(ex.getMessage().contains("Sheet not found"));
+    }
 } 
