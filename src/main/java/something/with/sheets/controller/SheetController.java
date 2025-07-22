@@ -8,6 +8,7 @@ import something.with.sheets.dto.CreateSheetRequest;
 import something.with.sheets.dto.CreateSheetResponse;
 import something.with.sheets.dto.SetCellValueRequest;
 import org.springframework.http.HttpStatus;
+import something.with.sheets.dto.GetSheetResponse;
 
 @RestController
 @RequestMapping("/sheets")
@@ -30,6 +31,20 @@ public class SheetController {
         try {
             sheetService.setCellValue(sheetId, request);
             return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("not found")) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(msg);
+            }
+            return ResponseEntity.badRequest().body(msg);
+        }
+    }
+
+    @GetMapping("/{sheetId}")
+    public ResponseEntity<?> getSheetById(@PathVariable String sheetId) {
+        try {
+            GetSheetResponse response = sheetService.getSheetById(sheetId);
+            return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             String msg = e.getMessage();
             if (msg != null && msg.contains("not found")) {

@@ -39,6 +39,18 @@ public class Sheet {
         return column.getCell(rowIndex);
     }
 
+    public Object getResolvedCellValue(int rowIndex, String columnName) {
+        Cell cell = getCell(rowIndex, columnName);
+        if (cell == null) return null;
+        return cell.getValue();
+    }
+
+    public Cell getCell(int rowIndex, String columnName) {
+        Column column = columns.get(columnName);
+        if (column == null) return null;
+        return column.getOrCreateCell(rowIndex);
+    }
+
     public static Sheet fromRequest(String id, CreateSheetRequest request) {
         List<Column> columns = request.getColumns().stream()
             .map(Column::fromDto)

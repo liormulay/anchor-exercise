@@ -8,6 +8,10 @@ import something.with.sheets.model.Column;
 import something.with.sheets.model.Sheet;
 import something.with.sheets.repository.SheetRepository;
 import java.util.UUID;
+import something.with.sheets.model.Cell;
+import something.with.sheets.dto.GetSheetResponse;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SheetService {
@@ -36,11 +40,59 @@ public class SheetService {
         }
         Object value = request.getValue();
         String type = column.getType();
-        if (!isValueOfType(value, type)) {
-            throw new IllegalArgumentException("Value does not match column type: " + type);
+        // Lookup function support
+        if (value instanceof String && ((String) value).startsWith("lookup(")) {
+            String lookupStr = (String) value;
+            // Parse lookup("A",10) or lookup(A,10)
+            String inner = lookupStr.substring(7, lookupStr.length() - 1).trim();
+            String[] parts = inner.split(",");
+            if (parts.length != 2) throw new IllegalArgumentException("Invalid lookup syntax");
+            String refCol = parts[0].replaceAll("[\"']", "").trim();
+            int refRow;
+            try {
+                refRow = Integer.parseInt(parts[1].trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid row index in lookup");
+            }
+            Column refColumn = sheet.getColumns().get(refCol);
+            if (refColumn == null) throw new IllegalArgumentException("Referenced column not found");
+            Cell refCell = refColumn.getOrCreateCell(refRow);
+            // Type validation
+            if (!type.equals(refColumn.getType())) {
+                throw new IllegalArgumentException("Type mismatch for lookup: " + type + " vs " + refColumn.getType());
+            }
+            // Cycle detection
+            Cell targetCell = column.getOrCreateCell(request.getRowIndex());
+            if (refCell == targetCell || refCell.hasCycle(targetCell)) {
+                throw new IllegalArgumentException("Cycle detected in lookup");
+            }
+            // Set as lookup
+            targetCell.setLookup(refCell);
+        } else {
+            // Normal value: clear lookup, set value, propagate
+            Cell cell = column.getOrCreateCell(request.getRowIndex());
+            cell.clearLookup();
+            if (!isValueOfType(value, type)) {
+                throw new IllegalArgumentException("Value does not match column type: " + type);
+            }
+            cell.setValue(value);
         }
-        sheet.setCellValue(request.getRowIndex(), request.getColumnName(), value);
         sheetRepository.save(sheet);
+    }
+
+    public GetSheetResponse getSheetById(String sheetId) {
+        Sheet sheet = sheetRepository.findById(sheetId);
+        if (sheet == null) {
+            throw new IllegalArgumentException("Sheet not found");
+        }
+        List<GetSheetResponse.ColumnData> columns = sheet.getColumns().values().stream()
+            .map(col -> new GetSheetResponse.ColumnData(
+                col.getName(),
+                col.getType(),
+                col.getCells().stream().map(cell -> cell != null ? cell.getValue() : null).collect(Collectors.toList())
+            ))
+            .collect(Collectors.toList());
+        return new GetSheetResponse(sheet.getId(), columns);
     }
 
     private boolean isValueOfType(Object value, String type) {

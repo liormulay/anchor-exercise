@@ -1,6 +1,7 @@
 package something.with.sheets.model;
 
 import something.with.sheets.dto.ColumnDto;
+import something.with.sheets.model.Cell;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -8,7 +9,7 @@ import java.util.List;
 public class Column {
     private final String name;
     private final String type;
-    private final List<Object> cells = new ArrayList<>();
+    private final List<Cell> cells = new ArrayList<>();
 
     public Column(String name, String type) {
         this.name = name;
@@ -23,26 +24,36 @@ public class Column {
         return type;
     }
 
-    public List<Object> getCells() {
+    public List<Cell> getCells() {
         return cells;
     }
 
     public void ensureCellExists(int rowIndex) {
         while (cells.size() <= rowIndex) {
-            cells.add(null);
+            cells.add(new Cell(null));
         }
     }
 
     public void setCell(int rowIndex, Object value) {
         ensureCellExists(rowIndex);
-        cells.set(rowIndex, value);
+        cells.get(rowIndex).setValue(value);
     }
 
     public Object getCell(int rowIndex) {
         if (rowIndex < 0 || rowIndex >= cells.size()) {
             return null;
         }
+        return cells.get(rowIndex).getValue();
+    }
+
+    public Cell getOrCreateCell(int rowIndex) {
+        ensureCellExists(rowIndex);
         return cells.get(rowIndex);
+    }
+
+    public void setCellLookup(int rowIndex, Cell target) {
+        ensureCellExists(rowIndex);
+        cells.get(rowIndex).setLookup(target);
     }
 
     public static Column fromDto(ColumnDto dto) {
