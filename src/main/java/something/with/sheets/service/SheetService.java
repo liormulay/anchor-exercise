@@ -40,44 +40,64 @@ public class SheetService {
         }
         Object value = request.getValue();
         String type = column.getType();
-        // Lookup function support
-        if (value instanceof String && ((String) value).startsWith("lookup(")) {
-            String lookupStr = (String) value;
-            // Parse lookup("A",10) or lookup(A,10)
-            String inner = lookupStr.substring(7, lookupStr.length() - 1).trim();
-            String[] parts = inner.split(",");
-            if (parts.length != 2) throw new IllegalArgumentException("Invalid lookup syntax");
-            String refCol = parts[0].replaceAll("[\"']", "").trim();
-            int refRow;
-            try {
-                refRow = Integer.parseInt(parts[1].trim());
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Invalid row index in lookup");
-            }
-            Column refColumn = sheet.getColumns().get(refCol);
-            if (refColumn == null) throw new IllegalArgumentException("Referenced column not found");
-            Cell refCell = refColumn.getOrCreateCell(refRow);
-            // Type validation
-            if (!type.equals(refColumn.getType())) {
-                throw new IllegalArgumentException("Type mismatch for lookup: " + type + " vs " + refColumn.getType());
-            }
-            // Cycle detection
-            Cell targetCell = column.getOrCreateCell(request.getRowIndex());
-            if (refCell == targetCell || refCell.hasCycle(targetCell)) {
-                throw new IllegalArgumentException("Cycle detected in lookup");
-            }
-            // Set as lookup
-            targetCell.setLookup(refCell);
+        if (isLookupValue(value)) {
+            handleLookupValue(sheet, column, request, value, type);
         } else {
-            // Normal value: clear lookup, set value, propagate
-            Cell cell = column.getOrCreateCell(request.getRowIndex());
-            cell.clearLookup();
-            if (!isValueOfType(value, type)) {
-                throw new IllegalArgumentException("Value does not match column type: " + type);
-            }
-            cell.setValue(value);
+            handleNormalValue(column, request, value, type);
         }
         sheetRepository.save(sheet);
+    }
+
+    private boolean isLookupValue(Object value) {
+        return value instanceof String && ((String) value).startsWith("lookup(");
+    }
+
+    private void handleLookupValue(Sheet sheet, Column column, SetCellValueRequest request, Object value, String type) {
+        LookupReference ref = parseLookupReference((String) value);
+        Column refColumn = sheet.getColumns().get(ref.refCol);
+        if (refColumn == null) throw new IllegalArgumentException("Referenced column not found");
+        Cell refCell = refColumn.getOrCreateCell(ref.refRow);
+        if (!type.equals(refColumn.getType())) {
+            throw new IllegalArgumentException("Type mismatch for lookup: " + type + " vs " + refColumn.getType());
+        }
+        Cell targetCell = column.getOrCreateCell(request.getRowIndex());
+        if (refCell == targetCell || refCell.hasCycle(targetCell)) {
+            throw new IllegalArgumentException("Cycle detected in lookup");
+        }
+        targetCell.setLookup(refCell);
+    }
+
+    private void handleNormalValue(Column column, SetCellValueRequest request, Object value, String type) {
+        Cell cell = column.getOrCreateCell(request.getRowIndex());
+        cell.clearLookup();
+        if (!isValueOfType(value, type)) {
+            throw new IllegalArgumentException("Value does not match column type: " + type);
+        }
+        cell.setValue(value);
+    }
+
+    private LookupReference parseLookupReference(String lookupStr) {
+        // Parse lookup("A",10) or lookup(A,10)
+        String inner = lookupStr.substring(7, lookupStr.length() - 1).trim();
+        String[] parts = inner.split(",");
+        if (parts.length != 2) throw new IllegalArgumentException("Invalid lookup syntax");
+        String refCol = parts[0].replaceAll("[\"']", "").trim();
+        int refRow;
+        try {
+            refRow = Integer.parseInt(parts[1].trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid row index in lookup");
+        }
+        return new LookupReference(refCol, refRow);
+    }
+
+    private static class LookupReference {
+        String refCol;
+        int refRow;
+        LookupReference(String refCol, int refRow) {
+            this.refCol = refCol;
+            this.refRow = refRow;
+        }
     }
 
     public GetSheetResponse getSheetById(String sheetId) {
