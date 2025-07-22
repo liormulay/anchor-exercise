@@ -13,6 +13,7 @@ import something.with.sheets.dto.CreateSheetRequest;
 import something.with.sheets.dto.CreateSheetResponse;
 import something.with.sheets.service.SheetService;
 import something.with.sheets.dto.SetCellValueRequest;
+import something.with.sheets.dto.GetSheetResponse;
 
 import java.util.Arrays;
 
@@ -97,5 +98,42 @@ class SheetControllerTest {
                 .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isNotFound())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Sheet not found")));
+    }
+
+    @Test
+    void getSheetById_Success() throws Exception {
+        String sheetId = "sheet-123";
+        GetSheetResponse.ColumnData colA = new GetSheetResponse.ColumnData("A", "boolean", Arrays.asList(true, false));
+        GetSheetResponse.ColumnData colB = new GetSheetResponse.ColumnData("B", "int", Arrays.asList(1, 2));
+        GetSheetResponse response = new GetSheetResponse(sheetId, Arrays.asList(colA, colB));
+        when(sheetService.getSheetById(sheetId)).thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/sheets/" + sheetId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(sheetId))
+                .andExpect(jsonPath("$.columns[0].name").value("A"))
+                .andExpect(jsonPath("$.columns[0].type").value("boolean"))
+                .andExpect(jsonPath("$.columns[0].values[0]").value(true))
+                .andExpect(jsonPath("$.columns[1].name").value("B"))
+                .andExpect(jsonPath("$.columns[1].type").value("int"))
+                .andExpect(jsonPath("$.columns[1].values[1]").value(2));
+    }
+
+    @Test
+    void getSheetById_NotFound() throws Exception {
+        String sheetId = "sheet-404";
+        when(sheetService.getSheetById(sheetId)).thenThrow(new IllegalArgumentException("Sheet not found"));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/sheets/" + sheetId))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Sheet not found")));
+    }
+
+    @Test
+    void getSheetById_BadRequest() throws Exception {
+        String sheetId = "sheet-bad";
+        when(sheetService.getSheetById(sheetId)).thenThrow(new IllegalArgumentException("Some other error"));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/sheets/" + sheetId))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Some other error")));
     }
 } 
